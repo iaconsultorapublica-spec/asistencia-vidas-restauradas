@@ -219,19 +219,19 @@
           <label class="block text-xs font-bold text-gray-700 uppercase mb-1">Teléfono / WhatsApp</label>
           <input type="tel" id="newTelefono" placeholder="Ej. 312 345 6789" class="w-full px-3.5 py-2.5 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-vr-blue focus:outline-none">
         </div>
-        <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="block text-xs font-bold text-gray-700 uppercase mb-1">Fecha Nacimiento</label>
-            <input type="date" id="newFechaNac" class="w-full px-2.5 py-2 border border-gray-300 rounded-xl text-xs focus:ring-2 focus:ring-vr-blue focus:outline-none">
-          </div>
-          <div>
-            <label class="block text-xs font-bold text-gray-700 uppercase mb-1">Grupo Etario</label>
-            <select id="newGrupo" class="w-full px-2.5 py-2 border border-gray-300 rounded-xl text-xs focus:ring-2 focus:ring-vr-blue focus:outline-none bg-white">
-              <option value="Mayores (26 a 55)">Mayores (26 a 55)</option>
-              <option value="Jóvenes (14 a 25)">Jóvenes (14 a 25)</option>
-              <option value="Niños (0 a 13)">Niños (0 a 13)</option>
-              <option value="Adultos Mayores (56+)">Adultos Mayores (56+)</option>
-            </select>
+        <div>
+          <label class="block text-xs font-bold text-gray-700 uppercase mb-1">Fecha de Nacimiento</label>
+          <input 
+            type="date" 
+            id="newFechaNac" 
+            onchange="autoCalculateAgeGroup(this.value)"
+            oninput="autoCalculateAgeGroup(this.value)"
+            class="w-full px-3.5 py-2.5 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-vr-blue focus:outline-none"
+          >
+          <!-- Auto-Calculated Badge -->
+          <div id="newCalculatedGroupBadge" class="hidden mt-2 p-2.5 rounded-xl bg-blue-50 border border-blue-200 flex items-center justify-between text-xs">
+            <span class="text-gray-700 font-medium">🎂 Edad: <strong id="newCalculatedAge" class="text-vr-blue font-bold">--</strong></span>
+            <span id="newCalculatedGroup" class="px-2.5 py-0.5 rounded-full font-black bg-vr-blue text-white text-[11px] shadow-sm">--</span>
           </div>
         </div>
         <div class="pt-2 flex space-x-2">

@@ -1,3 +1,42 @@
+
+// Calcular edad y grupo automáticamente desde la fecha de nacimiento
+function getAgeAndGroupFromBirthDate(birthDateStr) {
+  if (!birthDateStr) return { age: null, group: "Mayores (26 a 55)" };
+  const birth = new Date(birthDateStr + "T00:00:00");
+  if (isNaN(birth.getTime())) return { age: null, group: "Mayores (26 a 55)" };
+
+  const today = new Date();
+  let age = today.getFullYear() - birth.getFullYear();
+  const m = today.getMonth() - birth.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) {
+    age--;
+  }
+
+  let group = "Adultos Mayores (56+)";
+  if (age <= 13) group = "Niños (0 a 13)";
+  else if (age <= 25) group = "Jóvenes (14 a 25)";
+  else if (age <= 55) group = "Mayores (26 a 55)";
+
+  return { age, group };
+}
+
+function autoCalculateAgeGroup(dateStr) {
+  const badgeContainer = document.getElementById("newCalculatedGroupBadge");
+  const ageSpan = document.getElementById("newCalculatedAge");
+  const groupSpan = document.getElementById("newCalculatedGroup");
+  if (!badgeContainer || !ageSpan || !groupSpan) return;
+
+  if (!dateStr) {
+    badgeContainer.classList.add("hidden");
+    return;
+  }
+
+  const { age, group } = getAgeAndGroupFromBirthDate(dateStr);
+  ageSpan.textContent = `${age} años`;
+  groupSpan.textContent = group;
+  badgeContainer.classList.remove("hidden");
+}
+
 // Sundays Calendar Definition (2026 Cierre + 2027 Completo)
 const SUNDAYS = [
   // 2026 (7 domingos)
@@ -403,6 +442,8 @@ function renderApp() {
 // Modal New Member
 function openNewMemberModal() {
   document.getElementById("formNewMember").reset();
+  const badge = document.getElementById("newCalculatedGroupBadge");
+  if (badge) badge.classList.add("hidden");
   document.getElementById("newMemberModal").classList.remove("hidden");
 }
 
@@ -417,7 +458,7 @@ function saveNewMember(e) {
 
   const telefono = document.getElementById("newTelefono").value.trim();
   const fechaNac = document.getElementById("newFechaNac").value;
-  const grupo = document.getElementById("newGrupo").value;
+  const { age, group } = getAgeAndGroupFromBirthDate(fechaNac);
 
   const nextId = members.length > 0 ? Math.max(...members.map(m => m.id)) + 1 : 1;
 
@@ -426,8 +467,8 @@ function saveNewMember(e) {
     nombre: nombre.toUpperCase(),
     genero: "",
     fecha_nacimiento: fechaNac,
-    edad: null,
-    grupo: grupo,
+    edad: age,
+    grupo: group,
     telefono: telefono,
     barrio: ""
   };
