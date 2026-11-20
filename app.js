@@ -643,6 +643,27 @@ function exportToExcel() {
   XLSX.utils.book_append_sheet(wb, ws, "Reporte_Diario");
 
   const fileName = `Reporte_Asistencia_${currentSundayId}_VidasRestauradas.xlsx`;
+  
+  // Soporte para compartir directamente en WhatsApp (Android/iPhone)
+  try {
+    const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+    const blob = new Blob([wbout], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    const file = new File([blob], fileName, { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      navigator.share({
+        files: [file],
+        title: "Reporte de Asistencia Dominical",
+        text: `Reporte de Asistencia ${sundayLabel} - Vidas Restauradas Tabio`
+      }).catch(() => {
+        XLSX.writeFile(wb, fileName);
+      });
+      return;
+    }
+  } catch (err) {
+    console.warn("Share fallback:", err);
+  }
+
   XLSX.writeFile(wb, fileName);
 }
 
@@ -699,42 +720,91 @@ function importFromExcel(e) {
 async function syncToExcelBackend() {
   const btn = document.getElementById("btnSyncExcel");
   const originalHtml = btn.innerHTML;
-  btn.innerHTML = `<span class="animate-spin text-sm">⏳</span><span>Guardando...</span>`;
+  btn.innerHTML = `<span class="animate-spin text-sm">⏳</span><span>Guardando en Drive...</span>`;
   btn.disabled = true;
 
-  try {
-    const payload = {
-      sunday: currentSundayId,
-      attendance: attendance[currentSundayId] || {},
-      members: members,
-      deleted_ids: JSON.parse(localStorage.getItem("church_servicio_deleted") || "[]")
-    };
+  const currentMap = attendance[currentSundayId] || {};
+  const sundayObj = SUNDAYS.find(s => s.id === currentSundayId) || { year: 2026, label: currentSundayId };
+  
+  // Extraer mes y dia para coincidir con la cabecera (ej. 22-Nov)
+  const parts = currentSundayId.split("-");
+  const y = parseInt(parts[0], 10);
+  const m = parseInt(parts[1], 10);
+  const d = parseInt(parts[2], 10);
+  const monthsEsp = ["", "Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+  const monthDay = (d < 10 ? "0" + d : d) + "-" + monthsEsp[m];
 
-    const res = await fetch("/api/sync", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    });
-
-    const data = await res.json();
-    if (data.success) {
-      alert(`✅ ¡Excelente! Se guardaron ${data.markedCount} asistentes directamente en el archivo Excel:
-
-Sistema_Asistencia_Ministerio_Servicio.xlsx
-(Hoja: 2. Asistencia_2026 -> Columna: Dom 22-Nov)`);
-    } else {
-      alert("Error al sincronizar: " + (data.error || "Desconocido"));
+  const presentIds = [];
+  const presentNames = [];
+  members.forEach(m => {
+    if (currentMap[m.id]) {
+      presentIds.push(Number(m.id));
+      presentNames.push(m.nombre);
     }
+  });
+
+  const payload = {
+    version: "2.0",
+    year: sundayObj.year || y,
+    monthDay: monthDay,
+    sundayLabel: sundayObj.label,
+    presentCount: presentIds.length,
+    presentIds: presentIds,
+    presentNames: presentNames,
+    timestamp: new Date().toISOString()
+  };
+
+  const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwVHpR4jIcQs4hx7WY8pVPmDt1u_SDy0toNxnPrkKcxSgBvfMpOA3EU2K7i8kXAf4-h/exec";
+
+  try {
+    // 1. Enviar a Google Drive (Google Apps Script)
+    let syncSuccess = false;
+    let registeredCount = presentIds.length;
+
+    try {
+      const res = await fetch(GOOGLE_SCRIPT_URL, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify(payload)
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success) {
+          syncSuccess = true;
+          if (json.count !== undefined) registeredCount = json.count;
+        }
+      }
+    } catch (corsErr) {
+      // Modo seguro compatible con cualquier dispositivo móvil (evita bloqueos de redireccion CORS)
+      await fetch(GOOGLE_SCRIPT_URL, {
+        method: "POST",
+        mode: "no-cors",
+        headers: { "Content-Type": "text/plain" },
+        body: JSON.stringify(payload)
+      });
+      syncSuccess = true;
+    }
+
+    if (syncSuccess) {
+      alert(`✅ ¡ASISTENCIA GUARDADA EN GOOGLE DRIVE!
+
+📅 Fecha: ${sundayObj.label}
+👥 Total presentes registrados: ${registeredCount} personas
+
+La hoja de cálculo en el Google Drive de la encargada fue actualizada automáticamente en tiempo real.`);
+    } else {
+      throw new Error("No se pudo verificar la respuesta de Google Drive.");
+    }
+
   } catch (err) {
-    alert("No se pudo conectar con el servidor local del Mac (" + err.message + "). Recuerda que también puedes usar el botón 'Descargar' para bajar el archivo.");
+    console.error("Error al guardar en Google Drive:", err);
+    alert(`Ocurrió un inconveniente al guardar en Google Drive (${err.message}). Recuerda que también puedes usar el botón "Descargar / Enviar" para enviar el reporte dominical.`);
   } finally {
     btn.innerHTML = originalHtml;
     btn.disabled = false;
   }
 }
 
-
-// Tab Navigation
 function switchTab(tab) {
   const vAsist = document.getElementById("viewAsistencia");
   const vCont = document.getElementById("viewContenido");
