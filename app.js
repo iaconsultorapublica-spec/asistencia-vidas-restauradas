@@ -181,9 +181,31 @@ function loadData() {
   let defaultSunday = SUNDAYS.find(s => s.id >= todayStr);
   if (!defaultSunday) defaultSunday = SUNDAYS[1]; // Dom 22-Nov-2026 default
   currentSundayId = defaultSunday ? defaultSunday.id : SUNDAYS[0].id;
+  
+  // Sincronizar directorio de miembros desde Google Drive en segundo plano
+  syncMembersFromCloud();
 
   if (!attendance[currentSundayId]) {
     attendance[currentSundayId] = {};
+  }
+}
+
+
+// Sincronizar miembros desde Google Drive para que todos los celulares vean los mismos datos
+async function syncMembersFromCloud() {
+  try {
+    const res = await fetch(GOOGLE_SCRIPT_URL + "?t=" + Date.now());
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.success && data.members && data.members.length > 0) {
+        members = data.members;
+        saveMembers();
+        renderApp();
+        console.log("Directorio sincronizado desde Google Drive:", members.length);
+      }
+    }
+  } catch (err) {
+    console.warn("Aviso: usando miembros locales por conexion:", err);
   }
 }
 
@@ -473,7 +495,9 @@ function saveNewMember(e) {
     barrio: ""
   };
 
-  members.unshift(newMember); // Insert at top
+  members.push(newMember); // Se ubica en la ultima casilla de acuerdo al numero
+  // Re-ordenar por ID ascendente
+  members.sort((a, b) => a.id - b.id);
   saveMembers();
 
   // Mark present today
@@ -484,8 +508,17 @@ function saveNewMember(e) {
   closeNewMemberModal();
   clearSearch();
   renderApp();
-
   playTapSound(true);
+
+  // Sincronizar nuevo miembro inmediatamente con Google Drive
+  try {
+    fetch(GOOGLE_SCRIPT_URL, {
+      method: "POST",
+      mode: "no-cors",
+      headers: { "Content-Type": "text/plain" },
+      body: JSON.stringify({ action: "add_member", member: newMember })
+    }).catch(e => console.warn("Add member cloud sync:", e));
+  } catch (e) {}
 }
 
 // Modal Options
@@ -744,13 +777,15 @@ async function syncToExcelBackend() {
   });
 
   const payload = {
-    version: "2.0",
+    version: "2.1",
+    action: "sync_attendance",
     year: sundayObj.year || y,
     monthDay: monthDay,
     sundayLabel: sundayObj.label,
     presentCount: presentIds.length,
     presentIds: presentIds,
     presentNames: presentNames,
+    allMembers: members,
     timestamp: new Date().toISOString()
   };
 
@@ -862,8 +897,11 @@ function copyHex(hex) {
 // Eliminar / Dar de baja a una persona de la base de datos de la app
 function confirmDeleteMember(id, name) {
   if (confirm(`¿Estás seguro de eliminar a:\n\n"${name}"\n\nde la base de datos de asistencia?\n\nEsta persona ya no asistirá y será retirada del padrón.`)) {
-    // 1. Filtrar lista de miembros
+    // 1. Filtrar lista de miembros y re-numerar para que corra consecutivamente
     members = members.filter(m => Number(m.id) !== Number(id));
+    members.forEach((m, idx) => {
+      m.id = idx + 1; // Correr numero consecutivamente (ej: si se borra 106, el 107 pasa a 106)
+    });
     saveMembers();
 
     // 2. Limpiar registros de asistencia
@@ -886,8 +924,18 @@ function confirmDeleteMember(id, name) {
       }
     } catch(e) {}
 
-    // 4. Refrescar interfaz y contadores de inmediato
+    // 4. Sincronizar baja en Google Drive
+    try {
+      fetch(GOOGLE_SCRIPT_URL, {
+        method: "POST",
+        mode: "no-cors",
+        headers: { "Content-Type": "text/plain" },
+        body: JSON.stringify({ action: "delete_member", id: Number(id), name: name })
+      }).catch(e => console.warn("Delete member cloud sync:", e));
+    } catch (e) {}
+
+    // 5. Refrescar interfaz
     renderApp();
-    alert(`✅ "${name}" ha sido eliminado(a) con éxito de la base de datos.`);
+    alert(`✅ "${name}" ha sido eliminado(a) con éxito de la base de datos y de Google Drive.`);
   }
 }
