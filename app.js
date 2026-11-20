@@ -1,9 +1,9 @@
 
 // Calcular edad y grupo automáticamente desde la fecha de nacimiento
 function getAgeAndGroupFromBirthDate(birthDateStr) {
-  if (!birthDateStr) return { age: null, group: "Mayores (26 a 55)" };
+  if (!birthDateStr) return { age: null, group: "Adultos (26 a 55)" };
   const birth = new Date(birthDateStr + "T00:00:00");
-  if (isNaN(birth.getTime())) return { age: null, group: "Mayores (26 a 55)" };
+  if (isNaN(birth.getTime())) return { age: null, group: "Adultos (26 a 55)" };
 
   const today = new Date();
   let age = today.getFullYear() - birth.getFullYear();
@@ -15,7 +15,7 @@ function getAgeAndGroupFromBirthDate(birthDateStr) {
   let group = "Adultos Mayores (56+)";
   if (age <= 13) group = "Niños (0 a 13)";
   else if (age <= 25) group = "Jóvenes (14 a 25)";
-  else if (age <= 55) group = "Mayores (26 a 55)";
+  else if (age <= 55) group = "Adultos (26 a 55)";
 
   return { age, group };
 }
@@ -396,7 +396,7 @@ function renderApp() {
     // Group Badge colors
     let groupBadgeClass = "bg-gray-100 text-gray-700";
     if (m.grupo.includes("Jóvenes")) groupBadgeClass = "bg-blue-100 text-blue-700";
-    else if (m.grupo.includes("Mayores (26")) groupBadgeClass = "bg-emerald-100 text-emerald-700";
+    else if (m.grupo.includes("Adultos (26") || m.grupo === "Adultos") groupBadgeClass = "bg-emerald-100 text-emerald-800";
     else if (m.grupo.includes("Adultos Mayores")) groupBadgeClass = "bg-purple-100 text-purple-700";
     else if (m.grupo.includes("Niños")) groupBadgeClass = "bg-amber-100 text-amber-700";
 
@@ -506,25 +506,118 @@ function resetSundayAttendance() {
   }
 }
 
-// Export Attendance to Excel (.xlsx) using SheetJS
+// Export Attendance to Excel (.xlsx) con Informe Consolidado por Grupo Etario
 function exportToExcel() {
   const currentMap = attendance[currentSundayId] || {};
   const sundayObj = SUNDAYS.find(s => s.id === currentSundayId);
   const sundayLabel = sundayObj ? sundayObj.label : currentSundayId;
 
-  // Prepare table data
-  const data = [
-    ["MINISTERIO DE SERVICIO - REPORTE DE ASISTENCIA DOMINICAL"],
-    ["Fecha:", sundayLabel],
-    ["Fecha Exportación:", new Date().toLocaleString()],
-    [],
-    ["N° ID", "Nombres y Apellidos", "Grupo Etario", "Teléfono", "Estado Asistencia"]
-  ];
+  // Contabilizar por Grupo Etario
+  const groupsStats = {
+    "Niños (0 a 13)": { total: 0, present: 0 },
+    "Jóvenes (14 a 25)": { total: 0, present: 0 },
+    "Adultos (26 a 55)": { total: 0, present: 0 },
+    "Adultos Mayores (56+)": { total: 0, present: 0 }
+  };
 
-  let presentCount = 0;
+  let totalMembers = members.length;
+  let totalPresent = 0;
+
   members.forEach(m => {
     const isPresent = !!currentMap[m.id];
-    if (isPresent) presentCount++;
+    if (isPresent) totalPresent++;
+
+    let gKey = "Adultos (26 a 55)";
+    if (m.grupo && m.grupo.includes("Niños")) gKey = "Niños (0 a 13)";
+    else if (m.grupo && m.grupo.includes("Jóvenes")) gKey = "Jóvenes (14 a 25)";
+    else if (m.grupo && m.grupo.includes("Adultos Mayores")) gKey = "Adultos Mayores (56+)";
+    else if (m.grupo && m.grupo.includes("Mayores")) gKey = "Adultos (26 a 55)";
+
+    if (groupsStats[gKey]) {
+      groupsStats[gKey].total++;
+      if (isPresent) groupsStats[gKey].present++;
+    }
+  });
+
+  const totalAbsent = totalMembers - totalPresent;
+  const globalPct = totalMembers > 0 ? ((totalPresent / totalMembers) * 100).toFixed(1) + "%" : "0.0%";
+
+  // Estructura del Documento Excel Descargado
+  const data = [
+    ["VIDAS RESTAURADAS - IGLESIA CRISTIANA SEDE TABIO - ASAMBLEAS DE DIOS"],
+    ["MINISTERIO DE SERVICIO • CONTROL Y REPORTE DIARIO DE ASISTENCIA DOMINICAL"],
+    ["Lema: Marcos 10:45"],
+    [],
+    ["DATOS GENERALES DE LA REUNIÓN:"],
+    ["Fecha del Servicio / Domingo:", sundayLabel],
+    ["Fecha y Hora de Generación:", new Date().toLocaleString()],
+    ["Total Asistentes Presentes Hoy:", totalPresent],
+    ["Total Miembros Registrados:", totalMembers],
+    ["Total Ausentes Hoy:", totalAbsent],
+    ["% Asistencia General del Día:", globalPct],
+    [],
+    ["=================================================================================="],
+    ["REPORTE CONSOLIDADO POR GRUPOS ETARIOS DEL DÍA"],
+    ["=================================================================================="],
+    ["Grupo Etario", "Rango de Edad", "Total en Padrón", "Presentes Hoy", "Ausentes Hoy", "% Asistencia del Grupo"],
+    [
+      "Niños (0 a 13)",
+      "0 a 13 años",
+      groupsStats["Niños (0 a 13)"].total,
+      groupsStats["Niños (0 a 13)"].present,
+      groupsStats["Niños (0 a 13)"].total - groupsStats["Niños (0 a 13)"].present,
+      groupsStats["Niños (0 a 13)"].total > 0 ? ((groupsStats["Niños (0 a 13)"].present / groupsStats["Niños (0 a 13)"].total) * 100).toFixed(1) + "%" : "0.0%"
+    ],
+    [
+      "Jóvenes (14 a 25)",
+      "14 a 25 años",
+      groupsStats["Jóvenes (14 a 25)"].total,
+      groupsStats["Jóvenes (14 a 25)"].present,
+      groupsStats["Jóvenes (14 a 25)"].total - groupsStats["Jóvenes (14 a 25)"].present,
+      groupsStats["Jóvenes (14 a 25)"].total > 0 ? ((groupsStats["Jóvenes (14 a 25)"].present / groupsStats["Jóvenes (14 a 25)"].total) * 100).toFixed(1) + "%" : "0.0%"
+    ],
+    [
+      "Adultos (26 a 55)",
+      "26 a 55 años",
+      groupsStats["Adultos (26 a 55)"].total,
+      groupsStats["Adultos (26 a 55)"].present,
+      groupsStats["Adultos (26 a 55)"].total - groupsStats["Adultos (26 a 55)"].present,
+      groupsStats["Adultos (26 a 55)"].total > 0 ? ((groupsStats["Adultos (26 a 55)"].present / groupsStats["Adultos (26 a 55)"].total) * 100).toFixed(1) + "%" : "0.0%"
+    ],
+    [
+      "Adultos Mayores (56+)",
+      "56 años en adelante",
+      groupsStats["Adultos Mayores (56+)"].total,
+      groupsStats["Adultos Mayores (56+)"].present,
+      groupsStats["Adultos Mayores (56+)"].total - groupsStats["Adultos Mayores (56+)"].present,
+      groupsStats["Adultos Mayores (56+)"].total > 0 ? ((groupsStats["Adultos Mayores (56+)"].present / groupsStats["Adultos Mayores (56+)"].total) * 100).toFixed(1) + "%" : "0.0%"
+    ],
+    [
+      "TOTAL CONGREGACIÓN",
+      "-",
+      totalMembers,
+      totalPresent,
+      totalAbsent,
+      globalPct
+    ],
+    [],
+    ["=================================================================================="],
+    ["LISTADO DETALLADO DE ASISTENCIA INDIVIDUAL"],
+    ["=================================================================================="],
+    ["N° ID", "Nombres y Apellidos Completos", "Grupo Etario", "Teléfono / WhatsApp", "Estado Asistencia Hoy"]
+  ];
+
+  // Ordenar: primero presentes, luego ausentes
+  const sortedMembers = [...members].sort((a, b) => {
+    const aP = !!currentMap[a.id];
+    const bP = !!currentMap[b.id];
+    if (aP && !bP) return -1;
+    if (!aP && bP) return 1;
+    return a.nombre.localeCompare(b.nombre);
+  });
+
+  sortedMembers.forEach(m => {
+    const isPresent = !!currentMap[m.id];
     data.push([
       m.id,
       m.nombre,
@@ -534,19 +627,22 @@ function exportToExcel() {
     ]);
   });
 
-  // Summary row
-  data.push([]);
-  data.push(["TOTAL REGISTRADOS:", members.length]);
-  data.push(["TOTAL PRESENTES:", presentCount]);
-  data.push(["TOTAL AUSENTES:", members.length - presentCount]);
-  data.push(["% ASISTENCIA:", ((presentCount / members.length) * 100).toFixed(1) + "%"]);
-
-  // Create worksheet
   const ws = XLSX.utils.aoa_to_sheet(data);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Asistencia");
 
-  const fileName = `Asistencia_Servicio_${currentSundayId}.xlsx`;
+  // Anchos de columna
+  ws['!cols'] = [
+    { wch: 22 }, // A
+    { wch: 38 }, // B
+    { wch: 22 }, // C
+    { wch: 20 }, // D
+    { wch: 18 }, // E
+    { wch: 22 }  // F
+  ];
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Reporte_Diario");
+
+  const fileName = `Reporte_Asistencia_${currentSundayId}_VidasRestauradas.xlsx`;
   XLSX.writeFile(wb, fileName);
 }
 
@@ -577,7 +673,7 @@ function importFromExcel(e) {
           genero: row[2] || "",
           fecha_nacimiento: row[3] || "",
           edad: row[4] || null,
-          grupo: row[5] || "Mayores (26 a 55)",
+          grupo: row[5] || "Adultos (26 a 55)",
           telefono: row[8] ? String(row[8]) : "",
           barrio: row[10] || ""
         });
@@ -690,4 +786,38 @@ function copyHex(hex) {
   }).catch(() => {
     prompt("Copia este código de color:", hex);
   });
+}
+
+
+// Eliminar / Dar de baja a una persona de la base de datos de la app
+function confirmDeleteMember(id, name) {
+  if (confirm(`¿Estás seguro de eliminar a:\n\n"${name}"\n\nde la base de datos de asistencia?\n\nEsta persona ya no asistirá y será retirada del padrón.`)) {
+    // 1. Filtrar lista de miembros
+    members = members.filter(m => Number(m.id) !== Number(id));
+    saveMembers();
+
+    // 2. Limpiar registros de asistencia
+    if (attendance) {
+      Object.keys(attendance).forEach(d => {
+        if (attendance[d]) {
+          delete attendance[d][id];
+          delete attendance[d][String(id)];
+        }
+      });
+      saveAttendance();
+    }
+
+    // 3. Registrar en lista de bajas
+    try {
+      let deleted = JSON.parse(localStorage.getItem("church_servicio_deleted") || "[]");
+      if (!deleted.includes(id)) {
+        deleted.push(id);
+        localStorage.setItem("church_servicio_deleted", JSON.stringify(deleted));
+      }
+    } catch(e) {}
+
+    // 4. Refrescar interfaz y contadores de inmediato
+    renderApp();
+    alert(`✅ "${name}" ha sido eliminado(a) con éxito de la base de datos.`);
+  }
 }
