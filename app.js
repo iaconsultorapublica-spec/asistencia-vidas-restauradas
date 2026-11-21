@@ -1,4 +1,26 @@
 
+// Sincronización manual forzada desde el botón de la cabecera
+async function manualSyncFromCloud() {
+  try {
+    const res = await fetch("/api/members?t=" + Date.now());
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.success && data.members && data.members.length > 0) {
+        members = data.members;
+        saveMembers();
+        renderApp();
+        alert("✅ ¡Sincronización exitosa!\n\nSe cargaron " + members.length + " miembros directamente desde Google Drive.");
+        return;
+      }
+    }
+    throw new Error("No se pudo obtener datos");
+  } catch(e) {
+    alert("Conectando con Google Drive... Refrescando pantalla.");
+    syncMembersFromCloud();
+  }
+}
+
+
 // Calcular edad y grupo automáticamente desde la fecha de nacimiento
 function getAgeAndGroupFromBirthDate(birthDateStr) {
   if (!birthDateStr) return { age: null, group: "Adultos (26 a 55)" };
@@ -194,15 +216,26 @@ function loadData() {
 // Sincronizar miembros desde Google Drive para que todos los celulares vean los mismos datos
 async function syncMembersFromCloud() {
   try {
-    const res = await fetch(GOOGLE_SCRIPT_URL + "?t=" + Date.now());
-    if (res.ok) {
-      const data = await res.json();
-      if (data && data.success && data.members && data.members.length > 0) {
-        members = data.members;
-        saveMembers();
-        renderApp();
-        console.log("Directorio sincronizado desde Google Drive:", members.length);
-      }
+    // 1. Intentar por endpoint proxy de Vercel (mismo origen, 100% libre de CORS en celulares)
+    let data = null;
+    try {
+      const res = await fetch("/api/members?t=" + Date.now());
+      if (res.ok) data = await res.json();
+    } catch(proxyErr) {
+      console.warn("Proxy fallback to direct Google Script:", proxyErr);
+    }
+
+    // 2. Fallback directo a Google Apps Script si fuera necesario
+    if (!data || !data.success) {
+      const resDirect = await fetch(GOOGLE_SCRIPT_URL + "?t=" + Date.now());
+      if (resDirect.ok) data = await resDirect.json();
+    }
+
+    if (data && data.success && data.members && data.members.length > 0) {
+      members = data.members;
+      saveMembers();
+      renderApp();
+      console.log("✅ Directorio sincronizado desde Google Drive:", members.length);
     }
   } catch (err) {
     console.warn("Aviso: usando miembros locales por conexion:", err);
@@ -512,12 +545,19 @@ function saveNewMember(e) {
 
   // Sincronizar nuevo miembro inmediatamente con Google Drive
   try {
-    fetch(GOOGLE_SCRIPT_URL, {
+    const payload = { action: "add_member", member: newMember };
+    fetch("/api/sync", {
       method: "POST",
-      mode: "no-cors",
-      headers: { "Content-Type": "text/plain" },
-      body: JSON.stringify({ action: "add_member", member: newMember })
-    }).catch(e => console.warn("Add member cloud sync:", e));
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    }).catch(() => {
+      fetch(GOOGLE_SCRIPT_URL, {
+        method: "POST",
+        mode: "no-cors",
+        headers: { "Content-Type": "text/plain" },
+        body: JSON.stringify(payload)
+      });
+    });
   } catch (e) {}
 }
 
@@ -926,12 +966,19 @@ function confirmDeleteMember(id, name) {
 
     // 4. Sincronizar baja en Google Drive
     try {
-      fetch(GOOGLE_SCRIPT_URL, {
+      const payload = { action: "delete_member", id: Number(id), name: name };
+      fetch("/api/sync", {
         method: "POST",
-        mode: "no-cors",
-        headers: { "Content-Type": "text/plain" },
-        body: JSON.stringify({ action: "delete_member", id: Number(id), name: name })
-      }).catch(e => console.warn("Delete member cloud sync:", e));
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      }).catch(() => {
+        fetch(GOOGLE_SCRIPT_URL, {
+          method: "POST",
+          mode: "no-cors",
+          headers: { "Content-Type": "text/plain" },
+          body: JSON.stringify(payload)
+        });
+      });
     } catch (e) {}
 
     // 5. Refrescar interfaz
