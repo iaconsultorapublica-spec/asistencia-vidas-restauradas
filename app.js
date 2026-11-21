@@ -789,7 +789,7 @@ async function syncToExcelBackend() {
     timestamp: new Date().toISOString()
   };
 
-  const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwVHpR4jIcQs4hx7WY8pVPmDt1u_SDy0toNxnPrkKcxSgBvfMpOA3EU2K7i8kXAf4-h/exec";
+  const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyDjV7MtBQT7fxomc0iPrctJ0Sx6OsIJVuJwB_0rV5tC4BMTZCslzgRtvI9HKxSWXKT/exec";
 
   try {
     // 1. Enviar a Google Drive (Google Apps Script)
